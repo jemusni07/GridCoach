@@ -1,0 +1,338 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<base target="_blank">
+<style>
+  :root { --bg:#fafaf9; --panel:#fff; --ink:#1c1917; --muted:#78716c; --line:#e7e5e4; --accent:#0f766e; --accent-ink:#fff; --user:#ecfdf5; --err:#b91c1c; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; font:13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+  #app { display:flex; flex-direction:column; height:100vh; }
+  header { padding:10px 12px 8px; border-bottom:1px solid var(--line); background:var(--panel); }
+  .brand { display:flex; align-items:center; justify-content:space-between; }
+  .brand h1 { font-size:14px; margin:0; letter-spacing:.2px; }
+  .brand h1 span { color:var(--accent); }
+  #status { font-size:11px; color:var(--muted); margin-top:3px; min-height:14px; }
+  .actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .actions button { flex:1 1 auto; font-size:11px; padding:5px 8px; border:1px solid var(--line); background:var(--panel); border-radius:6px; cursor:pointer; color:var(--ink); }
+  .actions button:hover { border-color:var(--accent); color:var(--accent); }
+  #log { flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:100%; padding:8px 10px; border-radius:10px; white-space:normal; word-wrap:break-word; }
+  .msg.user { background:var(--user); align-self:flex-end; border-bottom-right-radius:3px; }
+  .msg.coach { background:var(--panel); border:1px solid var(--line); align-self:flex-start; border-bottom-left-radius:3px; }
+  .msg.sys { color:var(--muted); font-size:11px; text-align:center; background:none; padding:0; }
+  .msg.err { color:var(--err); background:#fef2f2; border:1px solid #fecaca; }
+  .msg p { margin:0 0 6px; } .msg p:last-child { margin:0; }
+  .msg ul, .msg ol { margin:4px 0 6px 18px; padding:0; }
+  .msg code { background:#f5f5f4; padding:1px 4px; border-radius:3px; font-size:12px; }
+  .msg h3, .msg h4 { margin:6px 0 4px; font-size:13px; }
+  .tools { font-size:10px; color:var(--muted); margin-top:6px; border-top:1px dashed var(--line); padding-top:4px; }
+  .tools span { display:inline-block; margin-right:6px; }
+  .thinking { display:flex; gap:4px; padding:8px 10px; }
+  .thinking i { width:6px; height:6px; border-radius:50%; background:var(--muted); animation:b 1s infinite; }
+  .thinking i:nth-child(2){animation-delay:.15s} .thinking i:nth-child(3){animation-delay:.3s}
+  @keyframes b { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 12px 8px; }
+  .chips button { font-size:11px; padding:4px 8px; border-radius:14px; border:1px solid var(--line); background:var(--panel); cursor:pointer; color:var(--muted); }
+  .chips button:hover { color:var(--accent); border-color:var(--accent); }
+  footer { padding:8px 12px 10px; border-top:1px solid var(--line); background:var(--panel); }
+  .row { display:flex; gap:6px; align-items:flex-end; }
+  textarea { flex:1; resize:none; min-height:38px; max-height:140px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; outline:none; }
+  textarea:focus { border-color:var(--accent); }
+  #send { padding:8px 12px; border:none; border-radius:8px; background:var(--accent); color:var(--accent-ink); cursor:pointer; font-weight:600; }
+  #send:disabled { opacity:.5; cursor:default; }
+  .hint { font-size:10px; color:var(--muted); margin-top:4px; }
+  .progress .steps { font-size:11px; color:var(--muted); }
+  .progress .step { padding:1px 0; } .progress .step.ok { color:var(--accent); } .progress .step.bad { color:var(--err); }
+  .progress .step.status { font-style:italic; }
+  .msg.confirm { background:#fffbeb; border:1px solid #fde68a; align-self:stretch; }
+  .msg.confirm.approved { opacity:.6; } .msg.confirm.cancelled { opacity:.5; text-decoration:line-through; }
+  .confirm-row { display:flex; gap:6px; margin-top:6px; }
+  .confirm-row button { font-size:11px; padding:4px 10px; border-radius:6px; border:1px solid var(--line); background:var(--panel); cursor:pointer; }
+  .confirm-row button.yes { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  #tabs-panel { margin-top:8px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
+  .panel-title { font-size:11px; font-weight:600; margin-bottom:6px; }
+  .tab-row { display:flex; gap:8px; align-items:flex-start; padding:4px 0; font-size:11px; }
+  .tab-row input { margin-top:2px; }
+  .tab-row .desc { color:var(--muted); }
+  .tab-row .have { color:var(--accent); font-weight:600; }
+  .panel-actions { display:flex; gap:6px; margin-top:6px; }
+  .panel-actions button { font-size:11px; padding:4px 8px; border-radius:6px; border:1px solid var(--line); background:var(--panel); cursor:pointer; }
+  #tabs-create { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <h1>Grid<span>Coach</span></h1>
+      <button id="reset" title="Start a new conversation" style="font-size:11px;border:none;background:none;color:var(--muted);cursor:pointer">new chat</button>
+    </div>
+    <div id="status">connecting…</div>
+    <div class="actions">
+      <button id="btn-setup" title="Pick which optional GridCoach tabs you want">Tabs</button>
+      <button id="btn-strava">Connect Strava</button>
+      <button id="btn-sync">Sync Strava</button>
+      <button id="btn-weather">Weather</button>
+    </div>
+    <div id="tabs-panel" hidden>
+      <div class="panel-title">Optional tabs — pick what you want in your sheet</div>
+      <div id="tabs-list"></div>
+      <div class="panel-actions"><button id="tabs-create">Create selected</button><button id="tabs-close">Close</button></div>
+    </div>
+  </header>
+
+  <div id="log"></div>
+
+  <div class="chips">
+    <button data-q="How am I doing this week? Read the snapshot and the log.">How am I doing?</button>
+    <button data-q="Give me my 2026 Strava summary so far: year-to-date totals per sport, monthly distance, longest sessions. Don't change the sheet.">2026 summary</button>
+    <button data-q="Analyze my most recent activity in detail (splits, HR drift, weather).">Analyze last run</button>
+    <button data-q="Compare my Training Log against my Training Plan for the last 7 days and tell me what to adjust.">Log vs plan</button>
+    <button data-q="Build me a training plan for my race in Settings, starting next Monday, based on my current load. Ask me anything you need first.">Plan my race</button>
+    <button data-q="Given the weather forecast and my plan, when should I do my long session this week?">When to go long?</button>
+  </div>
+
+  <footer>
+    <div class="row">
+      <textarea id="input" rows="1" placeholder="Ask your coach… or paste a training plan"></textarea>
+      <button id="send">Send</button>
+    </div>
+    <div class="hint">Enter to send · Shift+Enter for newline · the coach sees your selected cells</div>
+  </footer>
+</div>
+
+<script>
+  const $ = (s) => document.querySelector(s);
+  const log = $('#log'), input = $('#input'), send = $('#send'), statusEl = $('#status');
+  let busy = false;
+
+  // ---- tiny markdown → HTML (bold, italics, code, headings, lists, paragraphs) ----
+  function esc(s) { return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function inline(s) {
+    return esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/(^|\W)\*([^*\n]+)\*(?=\W|$)/g, '$1<i>$2</i>')
+      .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2">$1</a>');
+  }
+  function md(text) {
+    const lines = text.split('\n'); let html = '', list = null, para = [];
+    const flushP = () => { if (para.length) { html += '<p>' + inline(para.join(' ')) + '</p>'; para = []; } };
+    const flushL = () => { if (list) { html += '</' + list + '>'; list = null; } };
+    for (const raw of lines) {
+      const l = raw.trimEnd();
+      let m;
+      if ((m = l.match(/^#{1,4}\s+(.*)/))) { flushP(); flushL(); html += '<h4>' + inline(m[1]) + '</h4>'; }
+      else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { flushP(); if (list !== 'ul') { flushL(); list = 'ul'; html += '<ul>'; } html += '<li>' + inline(m[1]) + '</li>'; }
+      else if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { flushP(); if (list !== 'ol') { flushL(); list = 'ol'; html += '<ol>'; } html += '<li>' + inline(m[1]) + '</li>'; }
+      else if (!l.trim()) { flushP(); flushL(); }
+      else { flushL(); para.push(l); }
+    }
+    flushP(); flushL();
+    return html;
+  }
+
+  function add(kind, text, extra) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + kind;
+    el.innerHTML = kind === 'coach' ? md(text) : esc(text);
+    if (extra) el.appendChild(extra);
+    log.appendChild(el); log.scrollTop = log.scrollHeight;
+    return el;
+  }
+  function thinking() {
+    const el = document.createElement('div'); el.className = 'msg coach thinking'; el.innerHTML = '<i></i><i></i><i></i>';
+    log.appendChild(el); log.scrollTop = log.scrollHeight; return el;
+  }
+  function toolFooter(toolLog, touched) {
+    if (!(toolLog && toolLog.length) && !(touched && touched.length)) return null;
+    const d = document.createElement('div'); d.className = 'tools';
+    (toolLog || []).forEach(t => { const s = document.createElement('span'); s.textContent = (t.ok ? '✓ ' : '✗ ') + t.tool; s.title = JSON.stringify(t.args); d.appendChild(s); });
+    if (touched && touched.length) { const s = document.createElement('span'); s.textContent = '→ ' + touched.slice(0, 3).join(', '); d.appendChild(s); }
+    return d;
+  }
+
+  function run(fn, ...args) {
+    return new Promise((resolve, reject) => google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args));
+  }
+  function setBusy(b) { busy = b; send.disabled = b; document.querySelectorAll('.actions button, .chips button').forEach(x => x.disabled = b); }
+
+  // ---- background jobs: poll for live progress, then render the result ----
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  function progressBubble() {
+    const el = document.createElement('div'); el.className = 'msg coach progress';
+    el.innerHTML = '<div class="steps"></div><div class="thinking"><i></i><i></i><i></i></div>';
+    log.appendChild(el); log.scrollTop = log.scrollHeight; return el;
+  }
+  // The free tunnel hiccups now and then; a failed poll must not abandon a job that's still running server-side.
+  async function pollWithRetry(jobId, after, steps) {
+    const delays = [1500, 3000, 5000, 8000, 8000, 8000];
+    for (let i = 0; ; i++) {
+      try { return await run('pollJob', jobId, after); }
+      catch (e) {
+        if (i >= delays.length) throw new Error('Lost connection to the backend while a job was running. Reopen the sidebar to resume it.');
+        let s = steps.querySelector('.status'); if (!s) { s = document.createElement('div'); s.className = 'step status'; steps.appendChild(s); }
+        s.textContent = 'Connection hiccup — retrying…';
+        await sleep(delays[i]);
+      }
+    }
+  }
+  async function pollJob(jobId, bubble) {
+    let after = 0, snap;
+    const steps = bubble.querySelector('.steps');
+    while (true) {
+      snap = await pollWithRetry(jobId, after, steps);
+      for (const ev of snap.events || []) {
+        if (ev.type === 'tool_start') { const d = document.createElement('div'); d.className = 'step'; d.dataset.tool = ev.tool; d.textContent = '… ' + ev.text; steps.appendChild(d); }
+        else if (ev.type === 'tool_end') { const d = [...steps.querySelectorAll('.step')].reverse().find(x => x.dataset.tool === ev.tool && x.textContent.startsWith('…')); if (d) { d.textContent = (ev.ok ? '✓ ' : '✗ ') + d.textContent.slice(2) + (ev.text ? ' — ' + ev.text : ''); d.classList.add(ev.ok ? 'ok' : 'bad'); } }
+        else if (ev.type === 'status') { let s = steps.querySelector('.status'); if (!s) { s = document.createElement('div'); s.className = 'step status'; steps.appendChild(s); } s.textContent = ev.text; steps.appendChild(s); }
+      }
+      after = snap.next; log.scrollTop = log.scrollHeight;
+      if (snap.status !== 'running') break;
+      await sleep(1200);
+    }
+    if (snap.status === 'error') throw new Error(snap.error || 'job failed');
+    return snap.result;
+  }
+  function renderResult(res, bubble) {
+    bubble.remove();
+    add('coach', res.reply, toolFooter(res.tool_log, res.touched_ranges));
+    (res.pending_actions || []).forEach(renderPendingAction);
+    if (res.touched_ranges && res.touched_ranges.length) run('highlightRanges', res.touched_ranges).catch(() => {});
+  }
+  function renderPendingAction(pa) {
+    const card = document.createElement('div'); card.className = 'msg confirm';
+    card.innerHTML = `<div><b>Confirm?</b> ${esc(pa.description)}</div>`;
+    const row = document.createElement('div'); row.className = 'confirm-row';
+    const yes = document.createElement('button'); yes.textContent = 'Confirm'; yes.className = 'yes';
+    const no = document.createElement('button'); no.textContent = 'Cancel';
+    row.append(yes, no); card.appendChild(row); log.appendChild(card); log.scrollTop = log.scrollHeight;
+    const decide = async (approve) => {
+      yes.disabled = no.disabled = true; card.classList.add(approve ? 'approved' : 'cancelled');
+      if (busy) return; setBusy(true); const b = progressBubble();
+      try { const { job_id } = await run('resolveAction', pa.action_id, approve); renderResult(await pollJob(job_id, b), b); }
+      catch (e) { b.remove(); add('err', e.message || String(e)); }
+      setBusy(false);
+    };
+    yes.onclick = () => decide(true); no.onclick = () => decide(false);
+  }
+
+  async function ask(text, reset) {
+    text = (text || '').trim(); if (!text || busy) return;
+    add('user', text); input.value = ''; autosize();
+    setBusy(true); const b = progressBubble();
+    try {
+      const { job_id } = await run('sendChat', text, !!reset);
+      renderResult(await pollJob(job_id, b), b);
+    } catch (e) { b.remove(); add('err', e.message || String(e)); }
+    setBusy(false); input.focus();
+  }
+
+  async function refreshStatus() {
+    try {
+      const s = await run('getStatus');
+      const strava = s.strava_connected ? 'Strava: ' + s.athlete_name : 'Strava: not connected';
+      const sync = s.last_sync_at ? ' · synced ' + new Date(s.last_sync_at * 1000).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+      statusEl.textContent = strava + sync + ' · ' + s.model;
+      $('#btn-strava').textContent = s.strava_connected ? 'Reconnect Strava' : 'Connect Strava';
+      if (!s.strava_connected) add('sys', 'Tip: pick the tabs you want under Tabs (Training Log is needed for Strava), then Connect Strava → Sync Strava.');
+    } catch (e) { statusEl.textContent = e.message || 'backend unreachable — GridCoach → Configure backend…'; }
+  }
+
+  async function action(label, fn, ...args) {
+    if (busy) return; setBusy(true); const t = thinking(); add('sys', label + '…');
+    try { const r = await fn(...args); t.remove(); return r; } catch (e) { t.remove(); add('err', e.message || String(e)); }
+    finally { setBusy(false); }
+  }
+
+  // ---- optional tabs: the athlete decides what lives in the sheet ----
+  const panel = $('#tabs-panel'), tabsList = $('#tabs-list');
+  $('#btn-setup').onclick = async () => {
+    if (!panel.hidden) { panel.hidden = true; return; }
+    const cat = await action('Loading tab options', run, 'getTabCatalog'); if (!cat) return;
+    tabsList.innerHTML = '';
+    cat.forEach(t => {
+      const row = document.createElement('label'); row.className = 'tab-row';
+      row.innerHTML = `<input type="checkbox" value="${esc(t.name)}" ${t.exists ? 'checked disabled' : ''}>` +
+        `<span><b>${esc(t.name)}</b>${t.exists ? ' <span class="have">✓ have it</span>' : ''}<br><span class="desc">${esc(t.description)}</span></span>`;
+      tabsList.appendChild(row);
+    });
+    panel.hidden = false;
+  };
+  $('#tabs-close').onclick = () => { panel.hidden = true; };
+  $('#tabs-create').onclick = async () => {
+    const picked = [...tabsList.querySelectorAll('input:checked:not(:disabled)')].map(i => i.value);
+    if (!picked.length) { add('sys', 'Nothing selected — tick the tabs you want first.'); return; }
+    const r = await action('Creating ' + picked.join(', '), run, 'setupSheet', picked);
+    if (r) { panel.hidden = true; add('sys', (r.created.length ? 'Created: ' + r.created.join(', ') : 'Nothing new created') + '. You now have: ' + r.tabs.join(', ')); }
+  };
+  $('#btn-strava').onclick = async () => { const url = await action('Getting Strava link', run, 'stravaConnectUrl'); if (url) { window.open(url, '_blank'); add('sys', 'Authorize in the new tab, then click Sync Strava.'); } };
+  async function doSync() {
+    let r = await action('Starting Strava sync (90 days)', run, 'syncStrava', 90);
+    if (!r) return;
+    if (r.job_id) {
+      setBusy(true); const b = progressBubble();
+      try { r = await pollJob(r.job_id, b); b.remove(); if (r.touched && r.touched.length) run('highlightRanges', r.touched).catch(() => {}); }
+      catch (e) { b.remove(); add('err', e.message || String(e)); setBusy(false); return; }
+      setBusy(false);
+    }
+    if (r.missing_tab) {
+      // Tabs are opt-in: offer the one-click fix instead of failing.
+      const btn = document.createElement('button');
+      btn.textContent = `Create "${r.missing_tab}" tab and sync`;
+      btn.style.cssText = 'display:block;margin:6px auto 0;font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--accent);background:var(--panel);color:var(--accent);cursor:pointer';
+      btn.onclick = async () => {
+        btn.disabled = true;
+        const s = await action('Creating ' + r.missing_tab, run, 'setupSheet', [r.missing_tab]);
+        if (s) doSync();
+      };
+      add('sys', `Strava sync needs a "${r.missing_tab}" tab, which you haven't added.`, btn);
+      return;
+    }
+    add('sys', `Synced ${r.fetched} activities · ${r.appended} new · ${r.updated} updated` + (r.snapshot_written ? '' : ' (no Health Snapshot tab — metrics available in chat only)'));
+    refreshStatus();
+  }
+  $('#btn-sync').onclick = doSync;
+  $('#btn-weather').onclick = async () => { const r = await action('Refreshing weather', run, 'refreshWeather'); if (r) add('sys', `Weather tab: ${r.days}-day forecast for ${r.location.lat.toFixed(2)}, ${r.location.lng.toFixed(2)}`); };
+  $('#reset').onclick = async () => { await run('resetChat').catch(() => {}); log.innerHTML = ''; add('sys', 'New conversation started.'); };
+  document.querySelectorAll('.chips button').forEach(b => b.onclick = () => ask(b.dataset.q));
+
+  send.onclick = () => ask(input.value);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); } });
+  function autosize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; }
+  input.addEventListener('input', autosize);
+
+  // ---- on open: replay the persisted transcript and re-attach to any job still running ----
+  async function restore() {
+    let h = null;
+    try { h = await run('getHistory'); } catch (e) { /* backend unreachable — refreshStatus() will say so */ }
+    const msgs = (h && h.messages) || [];
+    if (!msgs.length) {
+      add('coach', "Hi — I'm your coach inside this sheet. I work with whatever tabs you choose to keep: sync Strava into a log, read your plan and health notes, and write back. Paste a training plan, or ask me anything.");
+    }
+    for (const m of msgs) {
+      if (m.role === 'coach') {
+        const meta = m.meta || {};
+        add('coach', m.text, toolFooter(meta.tool_log, meta.touched_ranges));
+        (meta.pending_actions || []).filter(pa => pa.open).forEach(renderPendingAction);
+      } else if (m.role === 'err') add('err', m.text);
+      else add(m.role === 'sys' ? 'sys' : 'user', m.text);
+    }
+    if (msgs.length) add('sys', 'Conversation restored — the coach remembers all of this.');
+    if (h && h.active_job) {
+      setBusy(true); const b = progressBubble();
+      add('sys', 'Re-attaching to a job that was still running…');
+      try {
+        const res = await pollJob(h.active_job.job_id, b);
+        if (h.active_job.kind === 'sync') { b.remove(); add('sys', `Synced ${res.fetched} activities · ${res.appended} new · ${res.updated} updated`); }
+        else renderResult(res, b);
+      } catch (e) { b.remove(); add('err', e.message || String(e)); }
+      setBusy(false);
+    }
+  }
+  restore();
+  refreshStatus();
+</script>
+</body>
+</html>
