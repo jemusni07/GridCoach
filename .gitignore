@@ -1,0 +1,15 @@
+# secrets
+.env
+service_account.json
+*.pem
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.db
+.pytest_cache/
+
+# misc
+.DS_Store
+node_modules/
