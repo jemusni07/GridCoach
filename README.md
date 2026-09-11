@@ -8,32 +8,35 @@ An AI training coach that lives **inside your Google Sheet**. Your Strava histor
 
 ```mermaid
 flowchart LR
-  subgraph Sheet["Google Sheet (source of truth)"]
-    PLAN[Training Plan]
-    LOG[Training Log]
-    HEALTH[Health Notes]
-    WX[Weather]
-    SNAP[Health Snapshot]
-    COACH[Coach Notes]
-    SET[Settings]
-    SIDEBAR[[Sidebar chat<br/>Apps Script]]
+  subgraph Sheet["Google Sheet — source of truth (tabs are opt-in)"]
+    PLAN["Training Plan"]
+    LOG["Training Log"]
+    HEALTH["Health Notes"]
+    SNAP["Health Snapshot"]
+    OTHER["Weather · Coach Notes · Settings · Coach Memory"]
+    SIDEBAR[["Sidebar chat (Apps Script)"]]
   end
 
-  SIDEBAR -- "UrlFetchApp + X-API-Key" --> API
+  SIDEBAR -- "UrlFetchApp + X-API-Key · jobs polled for live progress" --> API
 
-  subgraph Backend["FastAPI orchestrator"]
-    API[/api/chat, /api/strava/sync, …]
-    AGENT[OpenAI Responses loop<br/>function tools]
-    PIPE[Deterministic pipeline<br/>sync · enrich · snapshot · reconcile]
-    DB[(SQLite: tokens,<br/>thread ids)]
+  subgraph Backend["FastAPI backend"]
+    API["REST: chat · jobs · actions · sync · history"]
+    AGENT["OpenAI Responses loop (gpt-5.5) + function tools"]
+    PIPE["Deterministic pipeline: sync · enrich · snapshot · reconcile"]
+    SANDBOX["analyze_data: sandboxed pandas"]
+    DB[("SQLite: tokens · thread ids · memory · transcript · Strava cache")]
   end
 
-  API --> AGENT --> PIPE
+  API --> AGENT
+  AGENT --> PIPE
+  AGENT --> SANDBOX
   AGENT -- "Sheets API (service account)" --> Sheet
   PIPE --> Sheet
-  STRAVA[(Strava API)] -- "OAuth · activities · streams" --> PIPE
+  AGENT <--> DB
+  PIPE <--> DB
+  STRAVA[("Strava API")] -- "OAuth · activities · stats · zones · gear" --> DB
   STRAVA -- "webhook POST" --> API
-  METEO[(Open-Meteo)] -- "historical hourly · forecast" --> PIPE
+  METEO[("Open-Meteo")] -- "historical hourly · forecast" --> PIPE
 ```
 
 **What's deterministic (plain Python):** Strava → log rows, weather enrichment + heat-adjusted pace, the Health Snapshot (7d/28d load, ACWR, sport mix, adherence, race countdown), and plan-vs-log reconciliation (the `Status` column on the plan).
