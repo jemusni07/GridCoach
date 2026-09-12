@@ -88,6 +88,14 @@ cd backend
 uv sync
 uv run uvicorn app.main:app --reload --port 8000
 ```
+
+> **macOS + iCloud gotcha.** If the repo lives under `~/Documents` (or `~/Desktop`) with "Desktop & Documents Folders" iCloud sync on, iCloud evicts the venv's thousands of small files and imports block in `read()` for minutes — the server appears to hang with an empty log, and you may see `OSError: [Errno 89] Operation canceled`. Keep the venv outside iCloud:
+> ```bash
+> export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/gridcoach"   # add to ~/.zshrc
+> uv sync && uv run uvicorn app.main:app --port 8000
+> ```
+> Diagnose with `sample <pid>` — a blocked `read()` deep in an import chain is the tell.
+
 Check: `curl localhost:8000/health`.
 
 The sidebar runs on Google's servers, so the backend must be reachable from the internet (a `localhost` URL in Apps Script fails with "DNS error"). Any tunnel works; cloudflared needs no account:
