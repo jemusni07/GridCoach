@@ -6,6 +6,8 @@ Columns are located by header name, so users can reorder/insert columns freely.
 """
 from __future__ import annotations
 
+import base64
+import json
 import re
 import threading
 from datetime import datetime
@@ -159,9 +161,22 @@ def build_chart_request(sheet_id: int, chart_type: str, title: str, domain_range
         "widthPixels": width_px, "heightPixels": height_px}}}}}
 
 
+def _parse_service_account_json(raw: str) -> dict[str, Any]:
+    """Accept the key as raw JSON or base64(JSON) — base64 survives every secrets UI/CLI unmangled."""
+    raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            return json.loads(base64.b64decode(raw).decode("utf-8"))
+        except Exception as e:
+            raise SheetsError("GOOGLE_SERVICE_ACCOUNT_JSON is neither JSON nor base64-encoded JSON") from e
+
+
 class SheetsService:
-    def __init__(self, service_account_file: str):
+    def __init__(self, service_account_file: str, service_account_json: str = ""):
         self._file = service_account_file
+        self._json = service_account_json
         self._gc: gspread.Client | None = None
         self._lock = threading.Lock()
 
@@ -171,13 +186,16 @@ class SheetsService:
     def gc(self) -> gspread.Client:
         with self._lock:
             if self._gc is None:
-                try:
-                    self._gc = gspread.service_account(filename=self._file)
-                except FileNotFoundError as e:
-                    raise SheetsError(
-                        f"Service account file not found at {self._file}. "
-                        "Set GOOGLE_SERVICE_ACCOUNT_FILE in .env."
-                    ) from e
+                if self._json:  # hosted: key injected as an env var
+                    self._gc = gspread.service_account_from_dict(_parse_service_account_json(self._json))
+                else:
+                    try:
+                        self._gc = gspread.service_account(filename=self._file)
+                    except FileNotFoundError as e:
+                        raise SheetsError(
+                            f"Service account file not found at {self._file}. "
+                            "Set GOOGLE_SERVICE_ACCOUNT_FILE (local) or GOOGLE_SERVICE_ACCOUNT_JSON (hosted)."
+                        ) from e
             return self._gc
 
     def service_account_email(self) -> str | None:

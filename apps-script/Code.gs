@@ -44,14 +44,26 @@ function api_(method, path, payload) {
   const opts = {
     method,
     contentType: 'application/json',
-    headers: { 'X-API-Key': key },
+    headers: { 'X-API-Key': key, 'ngrok-skip-browser-warning': '1' },
     muteHttpExceptions: true,
   };
   if (payload && method !== 'get') opts.payload = JSON.stringify(payload);
   const res = UrlFetchApp.fetch(url + path, opts);
   const code = res.getResponseCode();
+  return parseBackend_(res, code);
+}
+
+/** Non-JSON means we never reached the backend (tunnel warning page, wrong URL, proxy error) — say so, don't return junk. */
+function parseBackend_(res, code) {
+  const text = res.getContentText();
   let body;
-  try { body = JSON.parse(res.getContentText()); } catch (e) { body = { error: res.getContentText().slice(0, 300) }; }
+  try { body = JSON.parse(text); }
+  catch (e) {
+    const looksLikeNgrok = /ngrok/i.test(text) && /<html/i.test(text);
+    throw new Error(looksLikeNgrok
+      ? 'ngrok served its warning page instead of the backend. Re-paste the latest Code.gs (it sends the bypass header).'
+      : 'Backend returned non-JSON (HTTP ' + code + '): ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160));
+  }
   if (code >= 400) throw new Error(body.error || body.detail || ('Backend error ' + code));
   return body;
 }
@@ -145,15 +157,15 @@ function stravaConnectUrl() {
 function syncStrava(daysBack) {
   const { url, key } = backendConfig_();
   const res = UrlFetchApp.fetch(url + '/api/strava/sync?background=true', {
-    method: 'post', contentType: 'application/json', headers: { 'X-API-Key': key }, muteHttpExceptions: true,
+    method: 'post', contentType: 'application/json', headers: { 'X-API-Key': key, 'ngrok-skip-browser-warning': '1' }, muteHttpExceptions: true,
     payload: JSON.stringify({ spreadsheet_id: spreadsheetId_(), days_back: daysBack || null }),
   });
-  let body; try { body = JSON.parse(res.getContentText()); } catch (e) { body = { error: res.getContentText().slice(0, 300) }; }
-  if (res.getResponseCode() >= 400) {
+  const code = res.getResponseCode();
+  if (code >= 400) {
+    let body; try { body = JSON.parse(res.getContentText()); } catch (e) { body = {}; }
     if (body.code === 'missing_tab') return { missing_tab: body.tab, error: body.error };  // let the sidebar offer a fix
-    throw new Error(body.error || body.detail || ('Backend error ' + res.getResponseCode()));
   }
-  return body;  // { job_id } — the sidebar polls it and highlights touched ranges when done
+  return parseBackend_(res, code);  // { job_id } — the sidebar polls it and highlights touched ranges when done
 }
 
 function refreshWeather() {

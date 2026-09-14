@@ -4,6 +4,12 @@ An AI training coach that lives **inside your Google Sheet**. Your Strava histor
 
 > Rationale: people want more control over how they train, and training has become a hybrid-sport journey. A spreadsheet is the most controllable, hackable training log there is — GridCoach just makes it talk back.
 
+## Demo
+
+[![GridCoach demo — AI trainer that lives in your Google Sheet (8 min)](docs/demo-preview.gif)](https://www.loom.com/share/731a656e2a6e4adeba58c12367f6b9eb)
+
+**[▶ Watch the walkthrough on Loom](https://www.loom.com/share/731a656e2a6e4adeba58c12367f6b9eb)** — connecting Strava, syncing into the sheet, asking the coach nuanced questions with live tool progress, and writing plans and charts back into the athlete's own tabs.
+
 ## Architecture
 
 ```mermaid
@@ -61,12 +67,17 @@ State lives in three places: the **Health Snapshot** tab (athlete-visible rollin
 
 ```
 backend/            FastAPI app (uv project, Python 3.11+)
-  app/agent/        prompts, tool schemas, Responses-API orchestrator
-  app/services/     sheets (gspread), strava, weather (Open-Meteo), analytics (pure), pipeline, state (sqlite)
+  app/agent/        prompts, tool schemas (24 tools), Responses-API orchestrator
+  app/services/     sheets (gspread) · strava + strava_cache (full-history) · weather (Open-Meteo)
+                    analytics (pure metrics) · pipeline (sync/enrich/recompute) · jobs (progress, pending actions)
+                    sandbox (pandas subprocess) · state (SQLite: tokens, memory, transcript, cache)
   app/routers/      /api/* (sidebar), /auth/strava, /webhook/strava
-  scripts/          strava_subscribe.py — manage the webhook subscription
-  tests/            analytics + orchestrator loop tests (no network)
+  scripts/          strava_subscribe.py — create/list/delete the Strava webhook subscription
+  tests/            36 tests, no network: analytics, tool loop, jobs/confirm/memory, sandbox, Strava cache
+  Dockerfile        generic container image (any host; SQLite via DATABASE_PATH on a mounted volume)
 apps-script/        Code.gs + Sidebar.html + appsscript.json (paste into the sheet's bound script)
+scripts/dev.sh      one command: tunnel + backend up / status / stop
+docs/               demo preview
 ```
 
 ## Setup
@@ -88,15 +99,28 @@ cd backend
 uv sync
 uv run uvicorn app.main:app --reload --port 8000
 ```
+
+> **macOS + iCloud gotcha.** If the repo lives under `~/Documents` (or `~/Desktop`) with "Desktop & Documents Folders" iCloud sync on, iCloud evicts the venv's thousands of small files and imports block in `read()` for minutes — the server appears to hang with an empty log, and you may see `OSError: [Errno 89] Operation canceled`. Keep the venv outside iCloud:
+> ```bash
+> export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/gridcoach"   # add to ~/.zshrc
+> uv sync && uv run uvicorn app.main:app --port 8000
+> ```
+> Diagnose with `sample <pid>` — a blocked `read()` deep in an import chain is the tell.
+
 Check: `curl localhost:8000/health`.
 
-The sidebar runs on Google's servers, so the backend must be reachable from the internet (a `localhost` URL in Apps Script fails with "DNS error"). Any tunnel works; cloudflared needs no account:
+The sidebar runs on Google's servers, so the backend must be reachable from the internet (a `localhost` URL in Apps Script fails with "DNS error"). Use a tunnel with a **fixed** domain so you configure the sidebar and the Strava callback once:
+
 ```bash
-# macOS arm64 binary (brew may have no bottle for your OS); other platforms: https://github.com/cloudflare/cloudflared/releases
-curl -sSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz | tar xz -C ~/.local/bin
-cloudflared tunnel --url http://localhost:8000     # prints https://<random>.trycloudflare.com
+brew install --cask ngrok
+ngrok config add-authtoken <token>            # dashboard.ngrok.com → Your Authtoken
+# dashboard.ngrok.com → Domains → New Domain → claim your free static domain (looks like xxx-yyy-zzz.ngrok-free.dev), then:
+echo 'NGROK_DOMAIN=<your-domain>.ngrok-free.dev' >> .env
+./scripts/dev.sh                              # starts ngrok on that domain + the backend; sets PUBLIC_BASE_URL
 ```
-Then set `PUBLIC_BASE_URL=https://<random>.trycloudflare.com` in `.env`, restart the backend, and put the same URL in the Strava app's **Authorization Callback Domain** (host only, no `https://`). The URL changes each time the tunnel restarts — ngrok with a static domain avoids that.
+Put `https://<your-domain>.ngrok-free.dev` in the sheet (**GridCoach → Configure backend…**) and `<your-domain>.ngrok-free.dev` (host only) in the Strava app's **Authorization Callback Domain**. Both survive restarts. Free ngrok domains show a one-time warning page to *browsers* — the sidebar sends `ngrok-skip-browser-warning` so Apps Script never sees it; you'll only meet it once on the Strava OAuth redirect. Without `NGROK_DOMAIN`, `dev.sh` falls back to a Cloudflare quick tunnel — no account, but a new random URL every time.
+
+Either way your laptop is still the host: lid closed = offline, and Strava webhooks only work while it's up. `./scripts/dev.sh status` checks public reachability; `./scripts/dev.sh stop` shuts everything down.
 
 ### 4. Apps Script (the sidebar)
 1. Open your sheet → **Extensions → Apps Script**.
@@ -122,6 +146,8 @@ Strava calls `GET /webhook/strava` with `hub.challenge` to verify, then POSTs ev
 - **"When should I do my long run?"** → Weather tab / forecast tool.
 - **Select cells and ask "what's this?"** → the selection is passed as context.
 - **Analyze last run** → km splits, aerobic decoupling, cardiac drift, cadence, and the weather at the start point.
+- **"My 2026 summary" / "summer vs last summer"** → answered from Strava's official stats and the full-history cache — nothing is written to the sheet for a question.
+- **"Sort my log", "delete the duplicate"** → server-side tools; deletes wait for your Confirm.
 
 Every write the agent makes is listed under its reply (`✓ write_training_plan → Training Plan!A2:J44`) and the sheet jumps to that range.
 
@@ -138,14 +164,16 @@ You decide what lives in your sheet. Nothing is created unless you tick it (side
 | Health Snapshot | recomputed after every sync | 7d/28d volume, ACWR, sport mix, adherence, race countdown |
 | Coach Notes | agent | Dated observations (sidebar + webhook analyst) |
 | Settings | you / agent | Race name/date/distance, goal, home lat/lng |
+| Coach Memory | agent (`remember` / `forget`) | Visible mirror of what the coach remembers about you (facts persist in the backend either way) |
 
 ## Tests
 ```bash
-cd backend && uv run pytest
+cd backend && uv run pytest        # 36 tests, no network or credentials needed
 ```
 
 ## Notes / limits
 - Strava standard tier: 100 requests / 15 min, 1000 / day, ≤ 10 connected athletes. Sync uses 1–2 calls per 200 activities; deep-dive uses 2 per activity.
 - Heat adjustment is a heuristic (≈1 %/°C apparent temp above 15 °C, capped 25 %) — a fairness lens, not physiology.
-- Set `OPENAI_MODEL` to switch models; reasoning models get `reasoning.effort=low` to keep sidebar latency down.
-- Apps Script's `google.script.run` has a 6-minute cap; long syncs should use the dedicated **Sync Strava** button rather than chat.
+- Set `OPENAI_MODEL` to switch models and `OPENAI_REASONING_EFFORT` (default `medium`) to trade depth for latency on gpt-5.x; background work always uses `low`.
+- Chat and sync run as background jobs, so nothing is bound by Apps Script's 6-minute execution cap; the sidebar just polls.
+- Hosting is your laptop plus a tunnel: lid closed = offline, and Strava webhooks are delivered only while it's up (the next **Sync Strava** catches up). The `Dockerfile` and `GOOGLE_SERVICE_ACCOUNT_JSON` support are there for whenever you move it to a real host.
