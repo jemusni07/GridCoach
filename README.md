@@ -98,13 +98,18 @@ uv run uvicorn app.main:app --reload --port 8000
 
 Check: `curl localhost:8000/health`.
 
-The sidebar runs on Google's servers, so the backend must be reachable from the internet (a `localhost` URL in Apps Script fails with "DNS error"). Any tunnel works; cloudflared needs no account:
+The sidebar runs on Google's servers, so the backend must be reachable from the internet (a `localhost` URL in Apps Script fails with "DNS error"). Use a tunnel with a **fixed** domain so you configure the sidebar and the Strava callback once:
+
 ```bash
-# macOS arm64 binary (brew may have no bottle for your OS); other platforms: https://github.com/cloudflare/cloudflared/releases
-curl -sSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz | tar xz -C ~/.local/bin
-cloudflared tunnel --url http://localhost:8000     # prints https://<random>.trycloudflare.com
+brew install --cask ngrok
+ngrok config add-authtoken <token>            # dashboard.ngrok.com → Your Authtoken
+# dashboard.ngrok.com → Domains → New Domain → claim your free static *.ngrok-free.app domain, then:
+echo 'NGROK_DOMAIN=<your-domain>.ngrok-free.app' >> .env
+./scripts/dev.sh                              # starts ngrok on that domain + the backend; sets PUBLIC_BASE_URL
 ```
-Then set `PUBLIC_BASE_URL=https://<random>.trycloudflare.com` in `.env`, restart the backend, and put the same URL in the Strava app's **Authorization Callback Domain** (host only, no `https://`). The URL changes each time the tunnel restarts — ngrok with a static domain avoids that.
+Put `https://<your-domain>.ngrok-free.app` in the sheet (**GridCoach → Configure backend…**) and `<your-domain>.ngrok-free.app` in the Strava app's **Authorization Callback Domain**. Both survive restarts. Without `NGROK_DOMAIN`, `dev.sh` falls back to a Cloudflare quick tunnel — no account, but a new random URL every time.
+
+Either way your laptop is still the host: lid closed = offline, and Strava webhooks only work while it's up. `./scripts/dev.sh status` checks public reachability; `./scripts/dev.sh stop` shuts everything down.
 
 ### 4. Apps Script (the sidebar)
 1. Open your sheet → **Extensions → Apps Script**.
