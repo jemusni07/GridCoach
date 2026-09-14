@@ -14,7 +14,7 @@ command -v fly >/dev/null || { echo "fly CLI not installed (brew install flyctl)
 
 get() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//'; }
 
-APP="$(grep -E '^app *= *"' fly.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+APP="$(grep -E "^app *= *['\"]" fly.toml | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")"
 URL="https://${APP}.fly.dev"
 
 args=(
