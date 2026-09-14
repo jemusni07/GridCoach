@@ -44,7 +44,7 @@ function api_(method, path, payload) {
   const opts = {
     method,
     contentType: 'application/json',
-    headers: { 'X-API-Key': key },
+    headers: { 'X-API-Key': key, 'ngrok-skip-browser-warning': '1' },
     muteHttpExceptions: true,
   };
   if (payload && method !== 'get') opts.payload = JSON.stringify(payload);
@@ -145,7 +145,7 @@ function stravaConnectUrl() {
 function syncStrava(daysBack) {
   const { url, key } = backendConfig_();
   const res = UrlFetchApp.fetch(url + '/api/strava/sync?background=true', {
-    method: 'post', contentType: 'application/json', headers: { 'X-API-Key': key }, muteHttpExceptions: true,
+    method: 'post', contentType: 'application/json', headers: { 'X-API-Key': key, 'ngrok-skip-browser-warning': '1' }, muteHttpExceptions: true,
     payload: JSON.stringify({ spreadsheet_id: spreadsheetId_(), days_back: daysBack || null }),
   });
   let body; try { body = JSON.parse(res.getContentText()); } catch (e) { body = { error: res.getContentText().slice(0, 300) }; }
