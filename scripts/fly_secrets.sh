@@ -29,7 +29,7 @@ args=(
   "GOOGLE_SERVICE_ACCOUNT_JSON=$(base64 < "$SA_FILE" | tr -d '\n')"
 )
 # drop any that came back empty (optional keys)
-final=(); for kv in "${args[@]}"; do [[ "$kv" == *=  ]] || final+=("$kv"); done
+final=(); for kv in "${args[@]}"; do [[ -n "${kv#*=}" ]] && final+=("$kv"); done   # drop only truly empty values (base64 ends in "=")
 
 echo "Setting ${#final[@]} secrets on Fly app '$APP' (PUBLIC_BASE_URL=$URL)…"
 fly secrets set "${final[@]}" --app "$APP"
