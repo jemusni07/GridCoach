@@ -4,6 +4,12 @@ An AI training coach that lives **inside your Google Sheet**. Your Strava histor
 
 > Rationale: people want more control over how they train, and training has become a hybrid-sport journey. A spreadsheet is the most controllable, hackable training log there is — GridCoach just makes it talk back.
 
+## Demo
+
+[![GridCoach demo — AI trainer that lives in your Google Sheet (8 min)](docs/demo-preview.gif)](https://www.loom.com/share/731a656e2a6e4adeba58c12367f6b9eb)
+
+**[▶ Watch the walkthrough on Loom](https://www.loom.com/share/731a656e2a6e4adeba58c12367f6b9eb)** — connecting Strava, syncing into the sheet, asking the coach nuanced questions with live tool progress, and writing plans and charts back into the athlete's own tabs.
+
 ## Architecture
 
 ```mermaid
