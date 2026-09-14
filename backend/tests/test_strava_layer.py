@@ -1,5 +1,6 @@
 """Strava cache (backfill → incremental), transcript store, stats/gear simplification."""
 import time
+from datetime import date
 
 from app.services import analytics as an
 from app.services.state import Store
@@ -38,7 +39,7 @@ async def test_cache_backfills_once_then_incremental(tmp_path):
     assert info["mode"] == "fresh" and strava.calls == [None]
     # stale → incremental with overlap
     store.mark_cache("sid", synced_at=int(time.time()) - 3600)
-    strava.acts.append(act(4, "2026-09-11"))
+    strava.acts.append(act(4, date.today().isoformat()))  # inside the 3-day overlap on any day the test runs
     info = await cache.ensure("sid")
     assert info["mode"] == "incremental" and info["count"] == 4 and len(strava.calls) == 2 and strava.calls[1] is not None
 
@@ -48,7 +49,8 @@ async def test_cache_backfills_once_then_incremental(tmp_path):
     assert q["matched"] == 2 and q["aggregates"]["by_month"] == {"2025-08": {"count": 1, "km": 10.0, "min": 50.0}, "2026-09": {"count": 1, "km": 10.0, "min": 50.0}}
     table = cache.table("sid")
     assert table[0][:4] == ["Date", "Activity ID", "Name", "Sport"] and "Kudos" in table[0] and len(table) == 5
-    assert cache.activities("sid", days_back=30) == [a for a in strava.acts if a["id"] == 4] or len(cache.activities("sid", days_back=30)) >= 1
+    recent = {a["id"] for a in cache.activities("sid", days_back=30)}
+    assert 4 in recent and not {1, 2} & recent  # window filter drops the 2024/2025 activities
 
 
 def test_transcript_store_roundtrip(tmp_path):

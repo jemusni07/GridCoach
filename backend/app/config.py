@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     strava_verify_token: str = "gridcoach-verify"
 
     google_service_account_file: str = str(REPO_ROOT / "service_account.json")
+    # Hosted deploys (Fly, Cloud Run) inject secrets as env vars, not files: the JSON key itself, raw or base64.
+    google_service_account_json: str = ""
     database_path: str = str(REPO_ROOT / "backend" / "gridcoach.db")
     default_lookback_days: int = 90
 

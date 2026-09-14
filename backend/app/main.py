@@ -37,7 +37,7 @@ class AppContext:
 def build_context(settings: Settings | None = None) -> AppContext:
     settings = settings or get_settings()
     store = Store(settings.database_path)
-    sheets = SheetsService(settings.google_service_account_file)
+    sheets = SheetsService(settings.google_service_account_file, settings.google_service_account_json)
     strava_svc = StravaService(settings, store)
     weather = WeatherService()
     pipeline = Pipeline(settings, store, sheets, strava_svc, weather)

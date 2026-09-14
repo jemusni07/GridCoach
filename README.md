@@ -113,7 +113,23 @@ Then set `PUBLIC_BASE_URL=https://<random>.trycloudflare.com` in `.env`, restart
 4. **GridCoach → Configure backend…** → enter your ngrok URL and the `GRIDCOACH_API_KEY` value.
 5. **GridCoach → Open coach** → click **Tabs** and tick only the tabs you want (Training Log is the one Strava sync needs) → **Connect Strava** → **Sync Strava**.
 
-### 5. Strava webhook (optional — auto-append + background coach notes)
+### 5. Deploy to Fly.io (permanent URL, laptop off)
+The tunnel is fine for a demo, but its URL changes on every restart and dies when the laptop sleeps. Fly runs the backend 24/7 on one small machine with SQLite on a persistent volume — no code changes, the in-memory job queue keeps working, and Strava webhooks finally have something to call.
+
+```bash
+brew install flyctl && fly auth signup          # or fly auth login
+cd backend
+fly launch --copy-config --no-deploy           # uses fly.toml; pick a unique app name + nearest region
+fly volumes create gridcoach_data --size 1     # same region as the app
+../scripts/fly_secrets.sh                      # pushes .env + service_account.json as Fly secrets
+fly deploy                                     # remote build, ~2-3 min
+fly status && curl https://<app>.fly.dev/health
+```
+Then, once and never again: sheet → **GridCoach → Configure backend…** → `https://<app>.fly.dev`, and Strava app → **Authorization Callback Domain** → `<app>.fly.dev`. Register the webhook from inside the machine so it uses the hosted URL: `fly ssh console -C "uv run --no-sync python scripts/strava_subscribe.py create"`.
+
+Cost: one `shared-cpu-1x` / 1 GB machine is a few dollars a month; `fly scale count 0` stops it. The service account key travels as `GOOGLE_SERVICE_ACCOUNT_JSON` (base64) — the file itself never leaves your laptop. Local dev is unchanged (`./scripts/dev.sh`).
+
+### 6. Strava webhook (optional — auto-append + background coach notes)
 ```bash
 cd backend
 uv run python scripts/strava_subscribe.py create     # PUBLIC_BASE_URL must be the public ngrok URL
