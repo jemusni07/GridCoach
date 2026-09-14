@@ -1,4 +1,4 @@
-# GridCoach backend — FastAPI + uv. Built remotely by `fly deploy`; no local Docker needed.
+# GridCoach backend — FastAPI + uv. Generic image for any container host; SQLite path via DATABASE_PATH.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -15,7 +15,7 @@ RUN uv sync --frozen --no-dev
 COPY app ./app
 COPY scripts ./scripts
 
-# SQLite lives on the mounted volume (see fly.toml); override locally with DATABASE_PATH.
+# Mount a persistent volume at /data and set DATABASE_PATH=/data/gridcoach.db to keep state across deploys.
 RUN mkdir -p /data
 VOLUME ["/data"]
 

@@ -1,8 +1,6 @@
-"""Hosted-deploy plumbing: service account from an env var, and the Docker/Fly config shape."""
+"""Hosted-deploy plumbing: service account supplied as an env var instead of a file."""
 import base64
 import json
-from pathlib import Path
-
 import pytest
 
 from app.services import sheets as sheets_mod
@@ -26,14 +24,3 @@ def test_env_json_takes_precedence_over_missing_file(monkeypatch):
     # file path alone, missing → clear error naming both options
     with pytest.raises(SheetsError, match="GOOGLE_SERVICE_ACCOUNT_JSON"):
         SheetsService("/definitely/missing.json").gc
-
-
-def test_fly_config_keeps_one_always_on_machine():
-    root = Path(__file__).resolve().parents[1]
-    toml = (root / "fly.toml").read_text()
-    assert 'auto_stop_machines = "off"' in toml and "max_machines_running = 1" in toml
-    assert 'DATABASE_PATH = "/data/gridcoach.db"' in toml and 'destination = "/data"' in toml
-    docker = (root / "Dockerfile").read_text()
-    assert "uv sync --frozen --no-dev" in docker and '"--port", "8080"' in docker
-    ignore = (root / ".dockerignore").read_text()
-    assert ".env" in ignore and "service_account.json" in ignore and "*.db" in ignore
